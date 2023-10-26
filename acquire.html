@@ -40,7 +40,7 @@ function resizeAssets() {
   for (var i = 0; i < rows; i++) {
     for (var j = 1; j < cols - 1; j++) {
       let cell = assets.rows[i].cells[j];
-      cell.style.height = height / 8;
+      cell.style.height = height / assets.rows.length;
       if (i == 0)
         cell.style.width = cell.style.height;
     }
@@ -53,29 +53,13 @@ function resize() {
 }
 visualViewport.onresize = resize;
 
-function initAssets(chains) {
-  let rows = assets.rows.length;
-  let cols = assets.rows[0].cells.length;
-  for (var j = 1; j < cols - 1; j++) {
-    let cell = assets.rows[0].cells[j];
-    cell.style.backgroundColor = chains[j-1].color;
-  }
-  assets.rows[0].cells[cols-1].innerText = "Cash";
-
-  for (let i = 1; i < rows - 1; i++) {
-    let cell = assets.rows[i].cells[0];
-    cell.innerText = "Player " + i;
-  }
-  assets.rows[rows-1].cells[0].innerText = "Shares remaining";
-}
-
 drawGrid(boardDiv, 9, 12, "uiBoard");
-drawGrid(assetsDiv, 8, 9, "assets");
+drawGrid(assetsDiv, 9, 9, "assets");
 resize();
-
+</script>
+<script>
 const neighbors = [[0,1], [1,0], [0,-1], [-1, 0]];
 class Game {
-
   constructor() {
     this.board = new Array(9);
     this.availableTiles = new Array();
@@ -88,22 +72,60 @@ class Game {
     }
 
     this.chains = [
-      { id: 0, color: "red",     basePrice: 200, size: 0, state: "inactive" },
-      { id: 1, color: "yellow",  basePrice: 200, size: 0, state: "inactive" },
-      { id: 2, color: "green",   basePrice: 300, size: 0, state: "inactive" },
-      { id: 3, color: "blue",    basePrice: 300, size: 0, state: "inactive" },
-      { id: 4, color: "sienna",  basePrice: 300, size: 0, state: "inactive" },
-      { id: 5, color: "cyan",    basePrice: 400, size: 0, state: "inactive" },
-      { id: 6, color: "hotpink", basePrice: 400, size: 0, state: "inactive" },
+      { id: 0, color: "red",     basePrice: 200, size: 0, state: "inactive", sharesRemaining: 25 },
+      { id: 1, color: "yellow",  basePrice: 200, size: 0, state: "inactive", sharesRemaining: 25 },
+      { id: 2, color: "green",   basePrice: 300, size: 0, state: "inactive", sharesRemaining: 25 },
+      { id: 3, color: "blue",    basePrice: 300, size: 0, state: "inactive", sharesRemaining: 25 },
+      { id: 4, color: "sienna",  basePrice: 300, size: 0, state: "inactive", sharesRemaining: 25 },
+      { id: 5, color: "cyan",    basePrice: 400, size: 0, state: "inactive", sharesRemaining: 25 },
+      { id: 6, color: "hotpink", basePrice: 400, size: 0, state: "inactive", sharesRemaining: 25 },
     ];
-    initAssets(this.chains);
 
     this.players = new Array(6);
     for (let i = 0; i < this.players.length; i++) {
-      this.players[i] = { tiles : new Set() }
+      this.players[i] = { tiles : new Set(), name: "Player " + (i+1), shares: new Array(this.chains.length).fill(0), cash: 60 }
     }
+
     this.playInitialTiles();
+    
+    this.initAssets();
+
     this.gameLoop();
+  }
+
+  initAssets() {
+    let rows = assets.rows.length;
+    let cols = assets.rows[0].cells.length;
+    for (var j = 1; j < cols - 1; j++) {
+      let cell = assets.rows[0].cells[j];
+      cell.style.backgroundColor = this.chains[j-1].color;
+    }
+    assets.rows[0].cells[cols-1].innerText = "Cash";
+    assets.rows[1].cells[0].innerText = "Active?";
+
+    for (let i = 0; i < this.players.length; i++) {
+      let cell = assets.rows[i+2].cells[0];
+      cell.innerText = this.players[i].name;
+    }
+    assets.rows[rows-1].cells[0].innerText = "Shares remaining";
+    this.updateAssets();
+  }
+
+  updateAssets() {
+    const rowsBeforePlayers = 2;
+    for (let p = 0; p < this.players.length; p++) {
+      console.log(p + " " + this.currentPlayer);
+      assets.rows[p+rowsBeforePlayers].cells[0].style.border = (p == this.currentPlayer) ? "5px dashed" : "1px solid";
+
+      for (let c = 0; c < this.chains.length; c++) {
+        assets.rows[p+rowsBeforePlayers].cells[c+1].innerText = this.players[p].shares[c];
+      }
+      assets.rows[p+rowsBeforePlayers].cells[this.chains.length + 1].innerText = this.players[p].cash*100;
+    }
+    for (let c = 0; c < this.chains.length; c++) {
+      assets.rows[1].cells[c+1].innerText = this.chains[c].state == "inactive" ? "No" : "Yes";
+      assets.rows[this.players.length + rowsBeforePlayers].cells[c+1].innerText = this.chains[c].sharesRemaining;
+    }
   }
 
   playInitialTiles() {
@@ -124,10 +146,11 @@ class Game {
 
   async gameLoop() {
     while (true) {
-      console.log(this.currentPlayer);
       let tile = await this.selectTile(this.players[this.currentPlayer].tiles);
       await this.playTile(tile);
+
       this.currentPlayer = (this.currentPlayer + 1) % this.players.length;
+      this.updateAssets();
     }
   }
 
@@ -152,6 +175,7 @@ class Game {
     let tile = this.availableTiles[i];
     this.availableTiles[i] = this.availableTiles[this.availableTiles.length - 1];
     this.availableTiles.pop();
+    console.log(this.availableTiles.length);
     return tile;
   }
 
@@ -171,8 +195,10 @@ class Game {
         continue;
       if (neighboringSafeChain == null)
         neighboringSafeChain = nValue;
-      else if (neighboringSafeChain != nValue)
+      else if (neighboringSafeChain != nValue) {
+        console.log(tile);
         return true;
+      }
     }
     return false;
   }
@@ -209,7 +235,7 @@ class Game {
     while (tiles.size < 6 && this.availableTiles.length > 0) {
       let t = this.drawTile();
       if (!this.isUnplayable(t))
-        tiles.add(this.drawTile());
+        tiles.add(t);
     }
 
     document.getElementById("prompt").innerText = "Select a tile to play";
@@ -272,7 +298,8 @@ class Game {
 
     if (neighboringChains.size > 1) {
       // merge chains
-      await this.mergeChains(tile, neighboringChains);
+      let survivingChain = await this.mergeChains(tile, neighboringChains);
+      this.addNeighboringSingles(neighboringSingles, survivingChain);
     } else if (neighboringChains.size == 1) {
       // expand existing chain
       let neighboringChain = neighboringChains.keys().next().value;
@@ -293,6 +320,32 @@ class Game {
     this.chains[chain].state = "active";
     this.updateBoard(tile.i, tile.j, chain);
     this.addNeighboringSingles(neighboringSingles, chain);
+
+    if (this.chains[chain].sharesRemaining > 0) {
+      this.chains[chain].sharesRemaining--;
+      this.players[this.currentPlayer].shares[chain]++;
+    } else {
+      // TODO: money in place of founder's share.
+    }
+
+    this.updateAssets();
+  }
+
+  async selectNextChainToMerge(chainsToProcess) {
+    let largestSize = 0;
+    let largestSet = new Set();
+    for (let c of chainsToProcess) {
+      if (this.chains[c].size < largestSize)
+        continue;
+      if (this.chains[c].size > largestSize) {
+        largestSize = this.chains[c].size;
+        largestSet.clear();
+      }
+      largestSet.add(c);
+    }
+    if (largestSet.size == 1)
+      return largestSet.keys().next().value;
+    return this.selectChainUI(chainsToProcess, "Select which chain to merge next");
   }
 
   async mergeChains(tile, neighboringChains) {
@@ -302,7 +355,11 @@ class Game {
     let chainSizeBeforeMerge = this.chains[chain].size;
 
     neighboringChains.delete(chain);
-    for (let n of neighboringChains) {
+
+    let chainsToProcess = structuredClone(neighboringChains);
+    while (chainsToProcess.size > 0) {
+      let n = await this.selectNextChainToMerge(chainsToProcess);
+      chainsToProcess.delete(n);
       this.chains[n].size = 0;
       this.chains[n].state = "inactive";
     }
@@ -316,6 +373,8 @@ class Game {
     this.updateBoard(tile.i, tile.j, chain);
 
     this.maybeMakeSafe(chain);
+    this.updateAssets();
+    return chain;
   }
 
   async selectMergerChainToSurvive(neighboringChains) {
@@ -346,6 +405,8 @@ class Game {
       if (this.chains[i].state == "inactive")
         eligibleChains.add(i);
     }
+    if (eligibleChains.size == 0)
+      return Promise.reject("Tried to found a chain when all are active");
     return this.selectChainUI(eligibleChains, "Select a chain to found");
   }
 
