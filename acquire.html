@@ -1,0 +1,372 @@
+<body>
+<div id="boardDiv"></div>
+<div style="height: 5px"></div>
+<div id="assetsDiv"></div>
+<div id="prompt"></div>
+<script>
+function drawGrid(target, rows, cols, id) {
+  let table = document.createElement("table");
+  table.id = id;
+  table.style.border = "3px solid black";
+  target.appendChild(table);
+  for (let i = 0; i < rows; i++) {
+    let tr = table.insertRow();
+    for (let j = 0; j < cols; j++) {
+      let cell = tr.insertCell();
+      cell.style.padding = "0px";
+      cell.style.border = "1px solid black";
+      cell.style.boxSizing = "border-box";
+      cell.style.textAlign = "center";
+    }
+  }
+}
+
+function resizeBoard() {
+  let rows = uiBoard.rows.length;
+  let cols = uiBoard.rows[0].cells.length;
+  for (var i = 0; i < rows; i++) {
+    for (var j = 0; j < cols; j++) {
+      let cell = uiBoard.rows[i].cells[j];
+      cell.style.height = .4 * window.visualViewport.height / rows;
+      cell.style.width = cell.style.height;
+    }  
+  }
+}
+
+function resizeAssets() {
+  let height = window.visualViewport.height * .4;
+  let rows = assets.rows.length;
+  let cols = assets.rows[0].cells.length;
+  for (var i = 0; i < rows; i++) {
+    for (var j = 1; j < cols - 1; j++) {
+      let cell = assets.rows[i].cells[j];
+      cell.style.height = height / 8;
+      if (i == 0)
+        cell.style.width = cell.style.height;
+    }
+  }
+}
+
+function resize() {
+  resizeBoard();
+  resizeAssets();
+}
+visualViewport.onresize = resize;
+
+function initAssets(chains) {
+  let rows = assets.rows.length;
+  let cols = assets.rows[0].cells.length;
+  for (var j = 1; j < cols - 1; j++) {
+    let cell = assets.rows[0].cells[j];
+    cell.style.backgroundColor = chains[j-1].color;
+  }
+  assets.rows[0].cells[cols-1].innerText = "Cash";
+
+  for (let i = 1; i < rows - 1; i++) {
+    let cell = assets.rows[i].cells[0];
+    cell.innerText = "Player " + i;
+  }
+  assets.rows[rows-1].cells[0].innerText = "Shares remaining";
+}
+
+drawGrid(boardDiv, 9, 12, "uiBoard");
+drawGrid(assetsDiv, 8, 9, "assets");
+resize();
+
+const neighbors = [[0,1], [1,0], [0,-1], [-1, 0]];
+class Game {
+
+  constructor() {
+    this.board = new Array(9);
+    this.availableTiles = new Array();
+    for (let i = 0; i < 9; i++) {
+      this.board[i] = new Array(12);
+      for (let j = 0; j < 12; j++) {
+        this.updateBoard(i, j, "open");
+        this.availableTiles.push({ i: i, j: j });
+      }
+    }
+
+    this.chains = [
+      { id: 0, color: "red",     basePrice: 200, size: 0, state: "inactive" },
+      { id: 1, color: "yellow",  basePrice: 200, size: 0, state: "inactive" },
+      { id: 2, color: "green",   basePrice: 300, size: 0, state: "inactive" },
+      { id: 3, color: "blue",    basePrice: 300, size: 0, state: "inactive" },
+      { id: 4, color: "sienna",  basePrice: 300, size: 0, state: "inactive" },
+      { id: 5, color: "cyan",    basePrice: 400, size: 0, state: "inactive" },
+      { id: 6, color: "hotpink", basePrice: 400, size: 0, state: "inactive" },
+    ];
+    initAssets(this.chains);
+
+    this.players = new Array(6);
+    for (let i = 0; i < this.players.length; i++) {
+      this.players[i] = { tiles : new Set() }
+    }
+    this.playInitialTiles();
+    this.gameLoop();
+  }
+
+  playInitialTiles() {
+    let earliestTile = null;
+    let earliestTilePlayer = -1;
+    for (let i = 0; i < this.players.length; i++) {
+      let tile = this.drawTile();
+      this.updateBoard(tile.i, tile.j, "single");
+      if (earliestTile == null || tile.j < earliestTile.j ||
+          (tile.j == earliestTile.j && tile.i < earliestTile.i)) {
+        earliestTile = tile;
+        earliestTilePlayer = i;
+      }
+    }
+
+    this.currentPlayer = earliestTilePlayer;
+  }
+
+  async gameLoop() {
+    while (true) {
+      console.log(this.currentPlayer);
+      let tile = await this.selectTile(this.players[this.currentPlayer].tiles);
+      await this.playTile(tile);
+      this.currentPlayer = (this.currentPlayer + 1) % this.players.length;
+    }
+  }
+
+  updateBoard(i, j, value) {
+    this.board[i][j] = value;
+    let cell = document.getElementById("uiBoard").rows[i].cells[j];
+    if (value == "open") {
+      cell.innerText = "" + (i+1) + String.fromCharCode(65 + j);
+      cell.style.backgroundColor = "white";
+    } else if (value == "single") {
+      cell.style.backgroundColor = "black";
+      cell.innerText = "";
+    } else {
+      cell.style.backgroundColor = this.chains[value].color;
+      cell.innerText = "";
+      this.chains[value].size++;
+    }
+  }
+
+  drawTile() {
+    let i = Math.floor(Math.random() * this.availableTiles.length);
+    let tile = this.availableTiles[i];
+    this.availableTiles[i] = this.availableTiles[this.availableTiles.length - 1];
+    this.availableTiles.pop();
+    return tile;
+  }
+
+  isUnplayable(tile) {
+    if (this.board[tile.i][tile.j] != "open")
+      throw new Error("isUnplayable called on tile that was already played.");
+    let neighboringSafeChain = null;
+    for (let n of neighbors) {
+      let ni = tile.i + n[0];
+      let nj = tile.j + n[1];
+      if (ni < 0 || nj < 0 || ni >= this.board.length || nj >= this.board[ni].length)
+        continue;
+      let nValue = this.board[ni][nj];
+      if (nValue == "open" || nValue == "single")
+        continue;
+      if (this.chains[nValue].state != "safe")
+        continue;
+      if (neighboringSafeChain == null)
+        neighboringSafeChain = nValue;
+      else if (neighboringSafeChain != nValue)
+        return true;
+    }
+    return false;
+  }
+
+  isTemporarilyUnplayable(tile) {
+    for (let c of this.chains) {
+      if (c.state == "inactive")
+        return false;
+    }
+    let hasNeighboringSingle = false;
+    for (let n of neighbors) {
+      let ni = tile.i + n[0];
+      let nj = tile.j + n[1];
+      if (ni < 0 || nj < 0 || ni >= this.board.length || nj >= this.board[ni].length)
+        continue;
+      let nValue = this.board[ni][nj];
+      if (nValue == "open")
+        continue;
+      if (nValue == "single") {
+        hasNeighboringSingle = true;
+        continue;
+      }
+      // neighboring chain
+      return false;
+    }
+    return hasNeighboringSingle;
+  }
+
+  async selectTile(tiles) {
+    for (let t of tiles) {
+      if (this.isUnplayable(t))
+        tiles.delete(t);
+    }
+    while (tiles.size < 6 && this.availableTiles.length > 0) {
+      let t = this.drawTile();
+      if (!this.isUnplayable(t))
+        tiles.add(this.drawTile());
+    }
+
+    document.getElementById("prompt").innerText = "Select a tile to play";
+    return new Promise(resolve => {
+      for (let t of tiles) {
+        let cell = uiBoard.rows[t.i].cells[t.j];
+        if (this.isTemporarilyUnplayable(t)) {
+          cell.style.border = "5px dotted";
+          continue;
+        }
+        cell.style.border = "5px dashed";
+        cell.onclick = () => {
+          for (let t of tiles) {
+            uiBoard.rows[t.i].cells[t.j].onclick = null;
+            uiBoard.rows[t.i].cells[t.j].style.border = "1px solid";
+          }
+          document.getElementById("prompt").innerText = "";
+          tiles.delete(t);
+          resolve(t);
+        }
+      }
+    });
+  }
+  
+  addNeighboringSingles(neighboringSingles, chain) {
+    while(neighboringSingles.size > 0) {
+      let n = neighboringSingles.keys().next().value;
+      neighboringSingles.delete(n);
+      this.updateBoard(n.i, n.j, chain);
+      for (let nn of neighbors) {
+        let nni = n.i + nn[0];
+        let nnj = n.j + nn[1];
+        if (nni < 0 || nnj < 0 || nni >= this.board.length || nnj >= this.board[nni].length)
+          continue;
+        if (this.board[nni][nnj] == "single")
+          neighboringSingles.add({ i: nni, j: nnj });
+      }
+    }
+  }
+
+  async playTile(tile) {
+    if (this.isUnplayable(tile))
+      return Promise.reject("Tried to play unplayable tile");
+    let neighboringChains = new Set();
+    let neighboringSingles = new Set();
+    for (let n of neighbors) {
+      let ni = tile.i + n[0];
+      let nj = tile.j + n[1];
+      if (ni < 0 || nj < 0 || ni >= this.board.length || nj >= this.board[ni].length)
+        continue;
+      let nValue = this.board[ni][nj];
+      if (nValue == "open")
+        continue;
+      if (nValue == "single") {
+        neighboringSingles.add({ i: ni, j: nj });
+        continue;
+      }
+      neighboringChains.add(nValue);
+    }
+
+    if (neighboringChains.size > 1) {
+      // merge chains
+      await this.mergeChains(tile, neighboringChains);
+    } else if (neighboringChains.size == 1) {
+      // expand existing chain
+      let neighboringChain = neighboringChains.keys().next().value;
+      this.updateBoard(tile.i, tile.j, neighboringChain);
+      this.addNeighboringSingles(neighboringSingles, neighboringChain);
+      this.maybeMakeSafe(neighboringChain);
+    } else if (neighboringSingles.size >= 1) {
+      // found new chain
+      await this.foundChain(tile, neighboringSingles);
+    } else {
+      // new single
+      this.updateBoard(tile.i, tile.j, "single");
+    }
+  }
+
+  async foundChain(tile, neighboringSingles) {
+    let chain = await this.selectChainToFound();
+    this.chains[chain].state = "active";
+    this.updateBoard(tile.i, tile.j, chain);
+    this.addNeighboringSingles(neighboringSingles, chain);
+  }
+
+  async mergeChains(tile, neighboringChains) {
+    this.updateBoard(tile.i, tile.j, "single");
+ 
+    let chain = await this.selectMergerChainToSurvive(neighboringChains);
+    let chainSizeBeforeMerge = this.chains[chain].size;
+
+    neighboringChains.delete(chain);
+    for (let n of neighboringChains) {
+      this.chains[n].size = 0;
+      this.chains[n].state = "inactive";
+    }
+    for (let i = 0; i < this.board.length; i++) {
+      for (let j = 0; j < this.board[i].length; j++) {
+        if (neighboringChains.has(this.board[i][j])) {
+          this.updateBoard(i, j, chain);
+        }
+      }
+    }
+    this.updateBoard(tile.i, tile.j, chain);
+
+    this.maybeMakeSafe(chain);
+  }
+
+  async selectMergerChainToSurvive(neighboringChains) {
+    let max = 0;
+    let maxChains = new Set();
+    for (let n of neighboringChains) {
+      if (this.chains[n].size > max) {
+        max = this.chains[n].size;
+        maxChains.clear();
+        maxChains.add(n);
+      } else if (this.chains[n].size == max) {
+        maxChains.add(n);
+      }
+    }
+    if (maxChains.size == 1)
+      return maxChains.keys().next().value;
+    return this.selectChainUI(maxChains, "Select a chain to survive the merger");
+  }
+
+  maybeMakeSafe(chain) {
+    if (this.chains[chain].size >= 11 && this.chains[chain].state != "safe")
+      this.chains[chain].state = "safe";
+  }
+
+  async selectChainToFound() {
+    let eligibleChains = new Set();
+    for (let i = 0; i < this.chains.length; i++) {
+      if (this.chains[i].state == "inactive")
+        eligibleChains.add(i);
+    }
+    return this.selectChainUI(eligibleChains, "Select a chain to found");
+  }
+
+  async selectChainUI(chains, promptText) {
+    document.getElementById("prompt").innerText = promptText;
+    return new Promise(resolve => {
+      for (let c of chains) {
+        let cell = assets.rows[0].cells[c+1];
+        cell.style.border = "5px dashed";
+        cell.onclick = () => {
+          for (let j = 1; j <= 7; j++) {
+            assets.rows[0].cells[j].onclick = null;
+            assets.rows[0].cells[j].style.border = "1px solid";
+          }
+          document.getElementById("prompt").innerText = "";
+          resolve(c);
+        }
+      }
+    });
+  }
+}
+
+window.game = new Game();
+</script>
