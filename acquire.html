@@ -200,7 +200,7 @@ class Game {
       let nValue = this.board[ni][nj];
       if (nValue == "open" || nValue == "single")
         continue;
-      if (this.chains[nValue].size >= 11)
+      if (this.chains[nValue].size < 11)
         continue;
       if (neighboringSafeChain == null)
         neighboringSafeChain = nValue;
@@ -351,19 +351,67 @@ class Game {
       return largestSet.keys().next().value;
     return this.selectChainUI(chainsToProcess, "Select which chain to merge next", fals);
   }
+  
+  payBonuses(c) {
+    let price = this.getSharePrice(c);
+    let playersWithShares = new Array();
+    for (let i = 0; i < this.players.length; i++) {
+      if (this.players[i].shares[c] > 0)
+        playersWithShares.push(this.players[i]);
+    }
+    if (playersWithShares.length == 1) {
+      // One player gets both bonuses
+      playersWithShares[0].cash += (price * 15);
+      return;
+    }
+    playersWithShares.sort((a,b) => {
+      if (a.shares[c] < b.shares[c])
+        return -1;
+      if (a.shares[c] > b.shares[c])
+        return 1;
+      return 0;
+    });
+    if (playersWithShares[0].shares[c] == playersWithShares[1].shares[c]) {
+      // tie for first
+      let tiedPlayers = 2;
+      for (; tiedPlayers < playersWithShares.length; tiedPlayers++) {
+        if (playersWithShares[0].shares[c] != playersWithShares[tiePlayers].shares[c])
+          break;
+      }
+      let splitBonus = Math.ceil((price * 15) / tiedPlayers);
+      for (let i = 0; i < tiedPlayers; i++) {
+        playersWithShares[i].cash += splitBonus;
+      }
+      return;
+    }
+    
+    // solo first place
+    playersWithShares[0].cash += (price * 10);
+
+    // split the second place bonus as necessary
+    let secondPlaces = 1;
+    for (; secondPlaces + 1 < playersWithShares.length; secondPlaces++) {
+      if (playersWithShares[1].shares[c] != playersWithShares[1+secondPlaces].shares[c])
+        break;
+    }
+    let splitBonus = Math.ceil((price * 5) / secondPlaces);
+    for (let i = 0; i < secondPlaces; i++) {
+      playersWithShares[1+i].cash += splitBonus;
+    }
+  }
 
   async mergeChains(tile, neighboringChains) {
     this.updateBoard(tile.i, tile.j, "single");
  
     let chain = await this.selectMergerChainToSurvive(neighboringChains);
-    let chainSizeBeforeMerge = this.chains[chain].size;
-
     neighboringChains.delete(chain);
 
     let chainsToProcess = structuredClone(neighboringChains);
     while (chainsToProcess.size > 0) {
       let n = await this.selectNextChainToMerge(chainsToProcess);
       chainsToProcess.delete(n);
+      this.payBonuses(n);
+      await this.mergeShares(chain, n);
       this.chains[n].size = 0;
     }
     for (let i = 0; i < this.board.length; i++) {
@@ -391,7 +439,7 @@ class Game {
     }
     if (maxChains.size == 1)
       return maxChains.keys().next().value;
-    return this.selectChainUI(maxChains, "Select a chain to survive the merger", fals);
+    return this.selectChainUI(maxChains, "Select a chain to survive the merger", false);
   }
 
   async selectChainToFound() {
@@ -416,7 +464,8 @@ class Game {
         let cell = assets.rows[0].cells[c+1];
         cell.style.border = "5px dashed";
         cell.onclick = () => {
-          for (let j = 0; j <= 7; j++) {
+          for (let j = 0; j < assets.rows[0].cells.length; j++) {
+            console.log("CLEAR " + j);
             assets.rows[0].cells[j].onclick = null;
             assets.rows[0].cells[j].style.border = "1px solid";
           }
@@ -433,7 +482,7 @@ class Game {
     for (let i = 3; i > 0; i--) {
       let activeAndAffordableChains = new Set();
       for (let c = 0; c < this.chains.length; c++) {
-        if (this.chains[c].size == 0)
+        if (this.chains[c].size == 0 || this.chains[c].sharesRemaining == 0)
           continue;
         if (this.getChainPrice(c) > player.cash)
           continue;
@@ -448,6 +497,32 @@ class Game {
       player.shares[c]++;
       this.chains[c].sharesRemaining--;
       this.updateAssets();
+    }
+  }
+  
+  async mergeShares(survivingChain, mergingChain) {
+    for (let i = 0; i < this.players.length; i++) {
+      let p = (this.currentPlayer + i) % this.players.length;
+      assets.rows[rowsBeforePlayers + p].cells[1 + mergingChain].style.border = "5px black dashed";
+      while (this.players[p].shares[mergingChain] > 0) {
+        let options = new Set();
+        options.add(7); // cash
+        if (this.players[p].shares[mergingChain] > 1 && this.chains[survivingChain].sharesRemaining > 0)
+          options.add(survivingChain);
+        let choice = await this.selectChainUI(options, "Sell, trade, or hold your shares", true);
+        if (choice == -1)
+          break;
+        if (choice == 7) {
+          this.players[p].shares[mergingChain]--;
+          this.players[p].cash += this.getChainPrice(mergingChain);
+        } else {
+          // 2-for-1 swap
+          this.players[p].shares[mergingChain] -= 2;
+          this.players[p].shares[survivingChain]++;
+        }
+        this.updateAssets();
+      }
+      assets.rows[rowsBeforePlayers + p].cells[1 + mergingChain].style.border = "1px black solid";
     }
   }
 }
