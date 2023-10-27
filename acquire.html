@@ -1,7 +1,5 @@
 <body>
-<div id="boardDiv"></div>
-<div style="height: 5px"></div>
-<div id="assetsDiv"></div>
+<div id="gameDiv" style="display: flex;"></div>
 <div id="prompt"></div>
 <script>
 function drawGrid(target, rows, cols, id) {
@@ -24,25 +22,40 @@ function drawGrid(target, rows, cols, id) {
 function resizeBoard() {
   let rows = uiBoard.rows.length;
   let cols = uiBoard.rows[0].cells.length;
+  let cellDimension;
+  if (window.visualViewport.height * 1.5 > window.visualViewport.width) {
+    cellDimension = window.visualViewport.height * .4  / cols;
+    gameDiv.style.flexDirection = "column";
+  } else {
+    cellDimension = window.visualViewport.width * .4 / rows;
+    gameDiv.style.flexDirection = "row";
+  }
   for (var i = 0; i < rows; i++) {
     for (var j = 0; j < cols; j++) {
       let cell = uiBoard.rows[i].cells[j];
-      cell.style.height = .4 * window.visualViewport.height / rows;
-      cell.style.width = cell.style.height;
+      cell.style.height = cellDimension;
+      cell.style.width = cellDimension;
     }  
   }
 }
 
 function resizeAssets() {
-  let height = window.visualViewport.height * .4;
   let rows = assets.rows.length;
   let cols = assets.rows[0].cells.length;
+  let cellDimension;
+  if (window.visualViewport.height * 1.5 > window.visualViewport.width) {
+    assets.style.float = "left";
+    cellDimension = window.visualViewport.height * .4  / cols;
+  } else {
+    assets.style.float = "right";
+    cellDimension = window.visualViewport.width * .4  / rows;
+  }
   for (var i = 0; i < rows; i++) {
-    for (var j = 1; j < cols - 1; j++) {
+    for (var j = 1; j < cols; j++) {
       let cell = assets.rows[i].cells[j];
-      cell.style.height = height / assets.rows.length;
+      cell.style.height = cellDimension;
       if (i == 0)
-        cell.style.width = cell.style.height;
+        cell.style.width = cellDimension;
     }
   }
 }
@@ -53,8 +66,8 @@ function resize() {
 }
 visualViewport.onresize = resize;
 
-drawGrid(boardDiv, 9, 12, "uiBoard");
-drawGrid(assetsDiv, 9, 9, "assets");
+drawGrid(gameDiv, 9, 12, "uiBoard");
+drawGrid(gameDiv, 9, 9, "assets");
 resize();
 </script>
 <script>
@@ -114,7 +127,6 @@ class Game {
   updateAssets() {
     const rowsBeforePlayers = 2;
     for (let p = 0; p < this.players.length; p++) {
-      console.log(p + " " + this.currentPlayer);
       assets.rows[p+rowsBeforePlayers].cells[0].style.border = (p == this.currentPlayer) ? "5px dashed" : "1px solid";
 
       for (let c = 0; c < this.chains.length; c++) {
@@ -175,7 +187,6 @@ class Game {
     let tile = this.availableTiles[i];
     this.availableTiles[i] = this.availableTiles[this.availableTiles.length - 1];
     this.availableTiles.pop();
-    console.log(this.availableTiles.length);
     return tile;
   }
 
@@ -196,7 +207,6 @@ class Game {
       if (neighboringSafeChain == null)
         neighboringSafeChain = nValue;
       else if (neighboringSafeChain != nValue) {
-        console.log(tile);
         return true;
       }
     }
