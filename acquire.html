@@ -19,11 +19,11 @@ function drawGrid(target, rows, cols, id) {
   }
 }
 
-function resizeBoard() {
-  let rows = uiBoard.rows.length;
-  let cols = uiBoard.rows[0].cells.length;
+function resizeGrid(grid) {
+  let rows = grid.rows.length;
+  let cols = grid.rows[0].cells.length;
   let cellDimension;
-  if (window.visualViewport.height * 1.5 > window.visualViewport.width) {
+  if (window.visualViewport.height > window.visualViewport.width) {
     cellDimension = window.visualViewport.height * .4  / cols;
     gameDiv.style.flexDirection = "column";
   } else {
@@ -32,46 +32,26 @@ function resizeBoard() {
   }
   for (var i = 0; i < rows; i++) {
     for (var j = 0; j < cols; j++) {
-      let cell = uiBoard.rows[i].cells[j];
+      let cell = grid.rows[i].cells[j];
       cell.style.height = cellDimension;
       cell.style.width = cellDimension;
     }  
   }
 }
 
-function resizeAssets() {
-  let rows = assets.rows.length;
-  let cols = assets.rows[0].cells.length;
-  let cellDimension;
-  if (window.visualViewport.height * 1.5 > window.visualViewport.width) {
-    assets.style.float = "left";
-    cellDimension = window.visualViewport.height * .4  / cols;
-  } else {
-    assets.style.float = "right";
-    cellDimension = window.visualViewport.width * .4  / rows;
-  }
-  for (var i = 0; i < rows; i++) {
-    for (var j = 1; j < cols; j++) {
-      let cell = assets.rows[i].cells[j];
-      cell.style.height = cellDimension;
-      if (i == 0)
-        cell.style.width = cellDimension;
-    }
-  }
-}
-
 function resize() {
-  resizeBoard();
-  resizeAssets();
+  resizeGrid(uiBoard);
+  resizeGrid(assets);
 }
 visualViewport.onresize = resize;
 
 drawGrid(gameDiv, 9, 12, "uiBoard");
-drawGrid(gameDiv, 9, 9, "assets");
+drawGrid(gameDiv, 10, 9, "assets");
 resize();
 </script>
 <script>
 const neighbors = [[0,1], [1,0], [0,-1], [-1, 0]];
+const rowsBeforePlayers = 3;
 class Game {
   constructor() {
     this.board = new Array(9);
@@ -85,13 +65,13 @@ class Game {
     }
 
     this.chains = [
-      { id: 0, color: "red",     basePrice: 200, size: 0, state: "inactive", sharesRemaining: 25 },
-      { id: 1, color: "yellow",  basePrice: 200, size: 0, state: "inactive", sharesRemaining: 25 },
-      { id: 2, color: "green",   basePrice: 300, size: 0, state: "inactive", sharesRemaining: 25 },
-      { id: 3, color: "blue",    basePrice: 300, size: 0, state: "inactive", sharesRemaining: 25 },
-      { id: 4, color: "sienna",  basePrice: 300, size: 0, state: "inactive", sharesRemaining: 25 },
-      { id: 5, color: "cyan",    basePrice: 400, size: 0, state: "inactive", sharesRemaining: 25 },
-      { id: 6, color: "hotpink", basePrice: 400, size: 0, state: "inactive", sharesRemaining: 25 },
+      { color: "red",     basePrice: 2, size: 0, sharesRemaining: 25 },
+      { color: "yellow",  basePrice: 2, size: 0, sharesRemaining: 25 },
+      { color: "green",   basePrice: 3, size: 0, sharesRemaining: 25 },
+      { color: "blue",    basePrice: 3, size: 0, sharesRemaining: 25 },
+      { color: "sienna",  basePrice: 3, size: 0, sharesRemaining: 25 },
+      { color: "cyan",    basePrice: 4, size: 0, sharesRemaining: 25 },
+      { color: "hotpink", basePrice: 4, size: 0, sharesRemaining: 25 },
     ];
 
     this.players = new Array(6);
@@ -100,9 +80,7 @@ class Game {
     }
 
     this.playInitialTiles();
-    
     this.initAssets();
-
     this.gameLoop();
   }
 
@@ -114,20 +92,37 @@ class Game {
       cell.style.backgroundColor = this.chains[j-1].color;
     }
     assets.rows[0].cells[cols-1].innerText = "Cash";
-    assets.rows[1].cells[0].innerText = "Active?";
+    assets.rows[1].cells[0].innerText = "Size";
+    assets.rows[2].cells[0].innerText = "Price";
 
     for (let i = 0; i < this.players.length; i++) {
-      let cell = assets.rows[i+2].cells[0];
+      let cell = assets.rows[i+rowsBeforePlayers].cells[0];
       cell.innerText = this.players[i].name;
     }
     assets.rows[rows-1].cells[0].innerText = "Shares remaining";
     this.updateAssets();
   }
 
+  getChainPrice(c) {
+    return this.chains[c].basePrice + (() => {
+      let size = this.chains[c].size;
+      if (size < 5)
+        return size - 2;
+      if (size <= 10)
+        return 4;
+      if (size <= 20)
+        return 5;
+      if (size <= 30)
+        return 6;
+      if (size <= 40)
+        return 7;
+      return 8;
+    })();
+  }
+
   updateAssets() {
-    const rowsBeforePlayers = 2;
     for (let p = 0; p < this.players.length; p++) {
-      assets.rows[p+rowsBeforePlayers].cells[0].style.border = (p == this.currentPlayer) ? "5px dashed" : "1px solid";
+      assets.rows[p+rowsBeforePlayers].cells[0].style.border = (p == this.currentPlayer) ? "5px solid" : "1px solid";
 
       for (let c = 0; c < this.chains.length; c++) {
         assets.rows[p+rowsBeforePlayers].cells[c+1].innerText = this.players[p].shares[c];
@@ -135,7 +130,8 @@ class Game {
       assets.rows[p+rowsBeforePlayers].cells[this.chains.length + 1].innerText = this.players[p].cash*100;
     }
     for (let c = 0; c < this.chains.length; c++) {
-      assets.rows[1].cells[c+1].innerText = this.chains[c].state == "inactive" ? "No" : "Yes";
+      assets.rows[1].cells[c+1].innerText = this.chains[c].size == 0 ? "-" : this.chains[c].size;
+      assets.rows[2].cells[c+1].innerText = this.chains[c].size == 0 ? "-" : "$" + (this.getChainPrice(c) * 100);
       assets.rows[this.players.length + rowsBeforePlayers].cells[c+1].innerText = this.chains[c].sharesRemaining;
     }
   }
@@ -160,6 +156,8 @@ class Game {
     while (true) {
       let tile = await this.selectTile(this.players[this.currentPlayer].tiles);
       await this.playTile(tile);
+      this.updateAssets();
+      await this.purchaseShares();
 
       this.currentPlayer = (this.currentPlayer + 1) % this.players.length;
       this.updateAssets();
@@ -202,7 +200,7 @@ class Game {
       let nValue = this.board[ni][nj];
       if (nValue == "open" || nValue == "single")
         continue;
-      if (this.chains[nValue].state != "safe")
+      if (this.chains[nValue].size >= 11)
         continue;
       if (neighboringSafeChain == null)
         neighboringSafeChain = nValue;
@@ -215,7 +213,7 @@ class Game {
 
   isTemporarilyUnplayable(tile) {
     for (let c of this.chains) {
-      if (c.state == "inactive")
+      if (c.size == 0)
         return false;
     }
     let hasNeighboringSingle = false;
@@ -253,14 +251,14 @@ class Game {
       for (let t of tiles) {
         let cell = uiBoard.rows[t.i].cells[t.j];
         if (this.isTemporarilyUnplayable(t)) {
-          cell.style.border = "5px dotted";
+          cell.style.border = "5px dashed gray";
           continue;
         }
-        cell.style.border = "5px dashed";
+        cell.style.border = "5px dashed black";
         cell.onclick = () => {
           for (let t of tiles) {
             uiBoard.rows[t.i].cells[t.j].onclick = null;
-            uiBoard.rows[t.i].cells[t.j].style.border = "1px solid";
+            uiBoard.rows[t.i].cells[t.j].style.border = "1px solid black";
           }
           document.getElementById("prompt").innerText = "";
           tiles.delete(t);
@@ -315,7 +313,6 @@ class Game {
       let neighboringChain = neighboringChains.keys().next().value;
       this.updateBoard(tile.i, tile.j, neighboringChain);
       this.addNeighboringSingles(neighboringSingles, neighboringChain);
-      this.maybeMakeSafe(neighboringChain);
     } else if (neighboringSingles.size >= 1) {
       // found new chain
       await this.foundChain(tile, neighboringSingles);
@@ -327,7 +324,6 @@ class Game {
 
   async foundChain(tile, neighboringSingles) {
     let chain = await this.selectChainToFound();
-    this.chains[chain].state = "active";
     this.updateBoard(tile.i, tile.j, chain);
     this.addNeighboringSingles(neighboringSingles, chain);
 
@@ -337,8 +333,6 @@ class Game {
     } else {
       // TODO: money in place of founder's share.
     }
-
-    this.updateAssets();
   }
 
   async selectNextChainToMerge(chainsToProcess) {
@@ -355,7 +349,7 @@ class Game {
     }
     if (largestSet.size == 1)
       return largestSet.keys().next().value;
-    return this.selectChainUI(chainsToProcess, "Select which chain to merge next");
+    return this.selectChainUI(chainsToProcess, "Select which chain to merge next", fals);
   }
 
   async mergeChains(tile, neighboringChains) {
@@ -371,7 +365,6 @@ class Game {
       let n = await this.selectNextChainToMerge(chainsToProcess);
       chainsToProcess.delete(n);
       this.chains[n].size = 0;
-      this.chains[n].state = "inactive";
     }
     for (let i = 0; i < this.board.length; i++) {
       for (let j = 0; j < this.board[i].length; j++) {
@@ -381,9 +374,6 @@ class Game {
       }
     }
     this.updateBoard(tile.i, tile.j, chain);
-
-    this.maybeMakeSafe(chain);
-    this.updateAssets();
     return chain;
   }
 
@@ -401,41 +391,64 @@ class Game {
     }
     if (maxChains.size == 1)
       return maxChains.keys().next().value;
-    return this.selectChainUI(maxChains, "Select a chain to survive the merger");
-  }
-
-  maybeMakeSafe(chain) {
-    if (this.chains[chain].size >= 11 && this.chains[chain].state != "safe")
-      this.chains[chain].state = "safe";
+    return this.selectChainUI(maxChains, "Select a chain to survive the merger", fals);
   }
 
   async selectChainToFound() {
     let eligibleChains = new Set();
     for (let i = 0; i < this.chains.length; i++) {
-      if (this.chains[i].state == "inactive")
+      if (this.chains[i].size == 0)
         eligibleChains.add(i);
     }
     if (eligibleChains.size == 0)
       return Promise.reject("Tried to found a chain when all are active");
-    return this.selectChainUI(eligibleChains, "Select a chain to found");
+    return this.selectChainUI(eligibleChains, "Select a chain to found", false);
   }
 
-  async selectChainUI(chains, promptText) {
+  async selectChainUI(chains, promptText, showDoneOption) {
     document.getElementById("prompt").innerText = promptText;
+    if (showDoneOption) {
+      assets.rows[0].cells[0].innerText = "Done";
+      chains.add(-1);
+    }
     return new Promise(resolve => {
       for (let c of chains) {
         let cell = assets.rows[0].cells[c+1];
         cell.style.border = "5px dashed";
         cell.onclick = () => {
-          for (let j = 1; j <= 7; j++) {
+          for (let j = 0; j <= 7; j++) {
             assets.rows[0].cells[j].onclick = null;
             assets.rows[0].cells[j].style.border = "1px solid";
           }
           document.getElementById("prompt").innerText = "";
+          assets.rows[0].cells[0].innerText = "";
           resolve(c);
         }
       }
     });
+  }
+
+  async purchaseShares() {
+    let player = this.players[this.currentPlayer];
+    for (let i = 3; i > 0; i--) {
+      let activeAndAffordableChains = new Set();
+      for (let c = 0; c < this.chains.length; c++) {
+        if (this.chains[c].size == 0)
+          continue;
+        if (this.getChainPrice(c) > player.cash)
+          continue;
+        activeAndAffordableChains.add(c);
+      }
+      if (activeAndAffordableChains.size == 0)
+        return;
+      let c = await this.selectChainUI(activeAndAffordableChains, "Purchase up to " + i + " shares", true);
+      if (c == -1) // Done
+        return;
+      player.cash -= this.getChainPrice(c);
+      player.shares[c]++;
+      this.chains[c].sharesRemaining--;
+      this.updateAssets();
+    }
   }
 }
 
