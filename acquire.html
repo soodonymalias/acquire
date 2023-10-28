@@ -15,6 +15,7 @@ function drawGrid(target, rows, cols, id) {
       cell.style.border = "1px solid black";
       cell.style.boxSizing = "border-box";
       cell.style.textAlign = "center";
+      cell.style.touchAction = "manipulation";
     }
   }
 }
@@ -353,7 +354,7 @@ class Game {
   }
   
   payBonuses(c) {
-    let price = this.getSharePrice(c);
+    let price = this.getChainPrice(c);
     let playersWithShares = new Array();
     for (let i = 0; i < this.players.length; i++) {
       if (this.players[i].shares[c] > 0)
@@ -366,16 +367,16 @@ class Game {
     }
     playersWithShares.sort((a,b) => {
       if (a.shares[c] < b.shares[c])
-        return -1;
-      if (a.shares[c] > b.shares[c])
         return 1;
+      if (a.shares[c] > b.shares[c])
+        return -1;
       return 0;
     });
     if (playersWithShares[0].shares[c] == playersWithShares[1].shares[c]) {
       // tie for first
       let tiedPlayers = 2;
       for (; tiedPlayers < playersWithShares.length; tiedPlayers++) {
-        if (playersWithShares[0].shares[c] != playersWithShares[tiePlayers].shares[c])
+        if (playersWithShares[0].shares[c] != playersWithShares[tiedPlayers].shares[c])
           break;
       }
       let splitBonus = Math.ceil((price * 15) / tiedPlayers);
@@ -411,6 +412,7 @@ class Game {
       let n = await this.selectNextChainToMerge(chainsToProcess);
       chainsToProcess.delete(n);
       this.payBonuses(n);
+      this.updateAssets();
       await this.mergeShares(chain, n);
       this.chains[n].size = 0;
     }
@@ -465,7 +467,6 @@ class Game {
         cell.style.border = "5px dashed";
         cell.onclick = () => {
           for (let j = 0; j < assets.rows[0].cells.length; j++) {
-            console.log("CLEAR " + j);
             assets.rows[0].cells[j].onclick = null;
             assets.rows[0].cells[j].style.border = "1px solid";
           }
@@ -503,7 +504,7 @@ class Game {
   async mergeShares(survivingChain, mergingChain) {
     for (let i = 0; i < this.players.length; i++) {
       let p = (this.currentPlayer + i) % this.players.length;
-      assets.rows[rowsBeforePlayers + p].cells[1 + mergingChain].style.border = "5px black dashed";
+      assets.rows[rowsBeforePlayers + p].cells[1 + mergingChain].style.border = "5px black solid";
       while (this.players[p].shares[mergingChain] > 0) {
         let options = new Set();
         options.add(7); // cash
@@ -514,6 +515,7 @@ class Game {
           break;
         if (choice == 7) {
           this.players[p].shares[mergingChain]--;
+          this.chains[mergingChain].sharesRemaining++;
           this.players[p].cash += this.getChainPrice(mergingChain);
         } else {
           // 2-for-1 swap
