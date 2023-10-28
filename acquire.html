@@ -82,6 +82,7 @@ class Game {
 
     this.playInitialTiles();
     this.initAssets();
+    document.getElementById("prompt").innerText = "";
     this.gameLoop();
   }
 
@@ -162,6 +163,9 @@ class Game {
 
       this.currentPlayer = (this.currentPlayer + 1) % this.players.length;
       this.updateAssets();
+      if (this.gameOver()) {
+        break;
+      }
     }
   }
 
@@ -526,6 +530,47 @@ class Game {
       }
       assets.rows[rowsBeforePlayers + p].cells[1 + mergingChain].style.border = "1px black solid";
     }
+  }
+
+  isGameOver() {
+    let hasSafeChain = false;
+    let hasUnsafeChain = false;
+    for (let c of chains) {
+      let size = c.size;
+      if (size >= 41)
+        return true;
+      if (size >= 11)
+        hasSafeChain = true;
+      else if (size > 0)
+        hasUnsafeChain = true;
+    }
+    return hasSafeChain && !hasUnsafeChain;
+  }
+
+  gameOver() {
+    if (!isGameOver())
+      return false;
+    for (let c of this.chains) {
+      if (c.size == 0)
+        continue;
+      this.payBonuses(c);
+      let price = this.getChainPrice(c);
+      for (let p of this.players) {
+        p.cash += (p.shares[c] * price);
+        p.shares[c] = 0;
+      }
+    }
+    let winningCash = 0;
+    for (let p of this.players) {
+      winningCash = Math.max(winningCash, p.cash);
+    }
+    this.updateAssets();
+
+    for (let i = 0; i < this.players.length; i++) {
+        assets.rows[rowsBeforePlayers + i].cells[0].style.border = "5px green solid";
+    }
+    document.getElementById("prompt").innerText = "Game over!";
+    return true;
   }
 }
 
