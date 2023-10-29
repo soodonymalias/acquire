@@ -524,7 +524,9 @@ class Game {
         } else {
           // 2-for-1 swap
           this.players[p].shares[mergingChain] -= 2;
+          this.chains[mergingChain].sharesRemaining += 2;
           this.players[p].shares[survivingChain]++;
+          this.chains[survivingChain].sharesRemaining--;
         }
         this.updateAssets();
       }
@@ -535,7 +537,7 @@ class Game {
   isGameOver() {
     let hasSafeChain = false;
     let hasUnsafeChain = false;
-    for (let c of chains) {
+    for (let c of this.chains) {
       let size = c.size;
       if (size >= 41)
         return true;
@@ -548,15 +550,17 @@ class Game {
   }
 
   gameOver() {
-    if (!isGameOver())
+    if (!this.isGameOver())
       return false;
-    for (let c of this.chains) {
-      if (c.size == 0)
+    this.currentPlayer = null;
+    for (let c = 0; c < this.chains.length; c++) {
+      if (this.chains[c].size == 0)
         continue;
       this.payBonuses(c);
       let price = this.getChainPrice(c);
       for (let p of this.players) {
         p.cash += (p.shares[c] * price);
+        this.chains[c].sharesRemaining += p.shares[c];
         p.shares[c] = 0;
       }
     }
@@ -567,6 +571,7 @@ class Game {
     this.updateAssets();
 
     for (let i = 0; i < this.players.length; i++) {
+      if (this.players[i].cash == winningCash)
         assets.rows[rowsBeforePlayers + i].cells[0].style.border = "5px green solid";
     }
     document.getElementById("prompt").innerText = "Game over!";
