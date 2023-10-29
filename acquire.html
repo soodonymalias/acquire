@@ -1,12 +1,31 @@
 <body>
 <div id="gameDiv" style="display: flex;"></div>
 <div id="prompt"></div>
+<div>
+<button type="button" onclick="start()">Start new game</button> with
+<select id="count">
+<option value="2">2</option>
+<option value="3">3</option>
+<option value="4" selected>4</option>
+<option value="5">5</option>
+<option value="6">6</option>
+</select>
+players.
+</div>
 <script>
-function drawGrid(target, rows, cols, id) {
+function start() {
+  window.game = new Game(parseInt(count.value));
+}
+
+function drawGrid(rows, cols, id) {
+  let oldTable = document.getElementById(id);
+  if (oldTable != null)
+    oldTable.remove();
+
   let table = document.createElement("table");
   table.id = id;
   table.style.border = "3px solid black";
-  target.appendChild(table);
+  gameDiv.appendChild(table);
   for (let i = 0; i < rows; i++) {
     let tr = table.insertRow();
     for (let j = 0; j < cols; j++) {
@@ -45,16 +64,17 @@ function resize() {
   resizeGrid(assets);
 }
 visualViewport.onresize = resize;
-
-drawGrid(gameDiv, 9, 12, "uiBoard");
-drawGrid(gameDiv, 10, 9, "assets");
-resize();
 </script>
 <script>
 const neighbors = [[0,1], [1,0], [0,-1], [-1, 0]];
 const rowsBeforePlayers = 3;
+const names = ["You", "Alice", "Bob", "Charlie", "David", "Erin"]
 class Game {
-  constructor() {
+  constructor(playerCount) {
+    drawGrid(9, 12, "uiBoard");
+    drawGrid(playerCount + 4, 9, "assets");
+    resize();
+
     this.board = new Array(9);
     this.availableTiles = new Array();
     for (let i = 0; i < 9; i++) {
@@ -75,9 +95,9 @@ class Game {
       { color: "hotpink", basePrice: 4, size: 0, sharesRemaining: 25 },
     ];
 
-    this.players = new Array(6);
+    this.players = new Array(playerCount);
     for (let i = 0; i < this.players.length; i++) {
-      this.players[i] = { tiles : new Set(), name: "Player " + (i+1), shares: new Array(this.chains.length).fill(0), cash: 60 }
+      this.players[i] = { tiles : new Set(), name: names[i], shares: new Array(this.chains.length).fill(0), cash: 60 }
     }
 
     this.playInitialTiles();
@@ -578,6 +598,4 @@ class Game {
     return true;
   }
 }
-
-window.game = new Game();
 </script>
