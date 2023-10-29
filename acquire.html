@@ -60,6 +60,8 @@ function resizeGrid(grid) {
 }
 
 function resize() {
+  if (document.getElementById("uiBoard") == null)
+    return;
   resizeGrid(uiBoard);
   resizeGrid(assets);
 }
@@ -352,11 +354,12 @@ class Game {
     this.updateBoard(tile.i, tile.j, chain);
     this.addNeighboringSingles(neighboringSingles, chain);
 
+    console.log(this.chains[chain].size);
     if (this.chains[chain].sharesRemaining > 0) {
       this.chains[chain].sharesRemaining--;
       this.players[this.currentPlayer].shares[chain]++;
     } else {
-      // TODO: money in place of founder's share.
+      this.players[this.currentPlayer].cash += this.getChainPrice(chain);
     }
   }
 
