@@ -10,11 +10,15 @@
 <option value="5">5</option>
 <option value="6">6</option>
 </select>
-players.
+players and mode:
+<select id="mode">
+<option value="ai" selected>AI</option>
+<option value="human">Play against yourself</option>
+</select>
 </div>
 <script>
 function start() {
-  window.game = new Game(parseInt(count.value));
+  window.game = new Game(parseInt(count.value), mode.value == "ai");
 }
 
 function drawGrid(rows, cols, id) {
@@ -72,11 +76,12 @@ const neighbors = [[0,1], [1,0], [0,-1], [-1, 0]];
 const rowsBeforePlayers = 3;
 const names = ["You", "Alice", "Bob", "Charlie", "David", "Erin"]
 class Game {
-  constructor(playerCount) {
+  constructor(playerCount, use_ai) {
     drawGrid(9, 12, "uiBoard");
     drawGrid(playerCount + 4, 9, "assets");
     resize();
 
+    this.ai = use_ai;
     this.board = new Array(9);
     this.availableTiles = new Array();
     for (let i = 0; i < 9; i++) {
@@ -125,6 +130,10 @@ class Game {
     }
     assets.rows[rows-1].cells[0].innerText = "Shares remaining";
     this.updateAssets();
+  }
+
+  useAI(player) {
+    return this.ai && player != 0;
   }
 
   getChainPrice(c) {
@@ -183,6 +192,10 @@ class Game {
       this.updateAssets();
       await this.purchaseShares();
 
+      let newTile = this.drawTile();
+      if (newTile != undefined)
+        this.players[this.currentPlayer].tiles.add(newTile);
+
       this.currentPlayer = (this.currentPlayer + 1) % this.players.length;
       this.updateAssets();
       if (this.gameOver()) {
@@ -208,11 +221,14 @@ class Game {
   }
 
   drawTile() {
-    let i = Math.floor(Math.random() * this.availableTiles.length);
-    let tile = this.availableTiles[i];
-    this.availableTiles[i] = this.availableTiles[this.availableTiles.length - 1];
-    this.availableTiles.pop();
-    return tile;
+    while (this.availableTiles.length > 0) {
+      let i = Math.floor(Math.random() * this.availableTiles.length);
+      let tile = this.availableTiles[i];
+      this.availableTiles[i] = this.availableTiles[this.availableTiles.length - 1];
+      this.availableTiles.pop();
+      if (!this.isUnplayable(tile))
+        return tile;
+    }
   }
 
   isUnplayable(tile) {
@@ -267,12 +283,23 @@ class Game {
       if (this.isUnplayable(t))
         tiles.delete(t);
     }
-    while (tiles.size < 6 && this.availableTiles.length > 0) {
+    while (tiles.size < 6) {
       let t = this.drawTile();
-      if (!this.isUnplayable(t))
-        tiles.add(t);
+      if (t == undefined)
+        break;
+      tiles.add(t);
     }
 
+    let tile;
+    if (this.useAI(this.currentPlayer))
+      tile = await this.selectTileAI(tiles);
+    else
+      tile = await this.selectTileUI(tiles);
+    tiles.delete(tile);
+    return tile;
+  }
+
+  async selectTileUI(tiles) {
     document.getElementById("prompt").innerText = "Select a tile to play";
     return new Promise(resolve => {
       for (let t of tiles) {
@@ -288,7 +315,6 @@ class Game {
             uiBoard.rows[t.i].cells[t.j].style.border = "1px solid black";
           }
           document.getElementById("prompt").innerText = "";
-          tiles.delete(t);
           resolve(t);
         }
       }
@@ -354,7 +380,6 @@ class Game {
     this.updateBoard(tile.i, tile.j, chain);
     this.addNeighboringSingles(neighboringSingles, chain);
 
-    console.log(this.chains[chain].size);
     if (this.chains[chain].sharesRemaining > 0) {
       this.chains[chain].sharesRemaining--;
       this.players[this.currentPlayer].shares[chain]++;
@@ -377,7 +402,10 @@ class Game {
     }
     if (largestSet.size == 1)
       return largestSet.keys().next().value;
-    return this.selectChainUI(chainsToProcess, "Select which chain to merge next", fals);
+
+    if (this.useAI(this.currentPlayer))
+      return this.selectNextChainToMergeAI(largestSet);
+    return this.selectChainUI(largestSet, "Select which chain to merge next", false);
   }
   
   payBonuses(c) {
@@ -468,6 +496,9 @@ class Game {
     }
     if (maxChains.size == 1)
       return maxChains.keys().next().value;
+
+    if (this.useAI(this.currentPlayer))
+      return this.selectMergerChainToSurviveAI(maxChains);
     return this.selectChainUI(maxChains, "Select a chain to survive the merger", false);
   }
 
@@ -479,6 +510,8 @@ class Game {
     }
     if (eligibleChains.size == 0)
       return Promise.reject("Tried to found a chain when all are active");
+    if (this.useAI(this.currentPlayer))
+      return this.selectChainToFoundAI(eligibleChains);
     return this.selectChainUI(eligibleChains, "Select a chain to found", false);
   }
 
@@ -518,7 +551,7 @@ class Game {
       }
       if (activeAndAffordableChains.size == 0)
         return;
-      let c = await this.selectChainUI(activeAndAffordableChains, "Purchase up to " + i + " shares", true);
+      let c = await this.selectShareToPurchase(activeAndAffordableChains, i);
       if (c == -1) // Done
         return;
       player.cash -= this.getChainPrice(c);
@@ -526,6 +559,12 @@ class Game {
       this.chains[c].sharesRemaining--;
       this.updateAssets();
     }
+  }
+
+  async selectShareToPurchase(chains, iText) {
+    if (this.useAI(this.currentPlayer))
+      return this.selectShareToPurchaseAI(chains);
+    return this.selectChainUI(chains, "Purchase up to " + iText + " shares", true);
   }
   
   async mergeShares(survivingChain, mergingChain) {
@@ -537,7 +576,7 @@ class Game {
         options.add(7); // cash
         if (this.players[p].shares[mergingChain] > 1 && this.chains[survivingChain].sharesRemaining > 0)
           options.add(survivingChain);
-        let choice = await this.selectChainUI(options, "Sell, trade, or hold your shares", true);
+        let choice = await this.selectMergeOption(options, p);
         if (choice == -1)
           break;
         if (choice == 7) {
@@ -555,6 +594,12 @@ class Game {
       }
       assets.rows[rowsBeforePlayers + p].cells[1 + mergingChain].style.border = "1px black solid";
     }
+  }
+
+  async selectMergeOption(options, player) {
+    if (this.useAI(player))
+      return this.selectMergeOptionAI(options);
+    return this.selectChainUI(options, "Sell, trade, or hold your shares", true);
   }
 
   isGameOver() {
@@ -599,6 +644,39 @@ class Game {
     }
     document.getElementById("prompt").innerText = "Game over!";
     return true;
+  }
+
+  selectTileAI(tiles) {
+    let i = Math.floor(Math.random() * tiles.size);
+    let tile = Array.from(tiles)[i];
+    if (this.isTemporarilyUnplayable(tile))
+      return this.selectTileAI(tiles);
+    return Array.from(tiles)[i];
+  }
+
+  selectNextChainToMergeAI(chains) {
+    let i = Math.floor(Math.random() * chains.size);
+    return Array.from(chains)[i];
+  }
+
+  selectMergerChainToSurviveAI(chains) {
+    let i = Math.floor(Math.random() * chains.size);
+    return Array.from(chains)[i];
+  }
+
+  selectChainToFoundAI(chains) {
+    let i = Math.floor(Math.random() * chains.size);
+    return Array.from(chains)[i];
+  }
+
+  selectShareToPurchaseAI(chains) {
+    let i = Math.floor(Math.random() * chains.size);
+    return Array.from(chains)[i];
+  }
+
+  selectMergeOptionAI(options) {
+    let i = Math.floor(Math.random() * options.size);
+    return Array.from(options)[i];
   }
 }
 </script>
