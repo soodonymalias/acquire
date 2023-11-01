@@ -292,7 +292,7 @@ class Game {
 
     let tile;
     if (this.useAI(this.currentPlayer))
-      tile = await this.selectTileAI(tiles);
+      tile = await this.selectTileAI(tiles, this.currentPlayer);
     else
       tile = await this.selectTileUI(tiles);
     tiles.delete(tile);
@@ -337,9 +337,7 @@ class Game {
     }
   }
 
-  async playTile(tile) {
-    if (this.isUnplayable(tile))
-      return Promise.reject("Tried to play unplayable tile");
+  getNeighbors(tile) {
     let neighboringChains = new Set();
     let neighboringSingles = new Set();
     for (let n of neighbors) {
@@ -356,6 +354,13 @@ class Game {
       }
       neighboringChains.add(nValue);
     }
+    return [neighboringChains, neighboringSingles];
+  }
+
+  async playTile(tile) {
+    if (this.isUnplayable(tile))
+      return Promise.reject("Tried to play unplayable tile");
+    let [ neighboringChains, neighboringSingles ] = this.getNeighbors(tile);
 
     if (neighboringChains.size > 1) {
       // merge chains
@@ -404,7 +409,7 @@ class Game {
       return largestSet.keys().next().value;
 
     if (this.useAI(this.currentPlayer))
-      return this.selectNextChainToMergeAI(largestSet);
+      return this.selectNextChainToMergeAI(largestSet, this.currentPlayer);
     return this.selectChainUI(largestSet, "Select which chain to merge next", false);
   }
   
@@ -498,7 +503,7 @@ class Game {
       return maxChains.keys().next().value;
 
     if (this.useAI(this.currentPlayer))
-      return this.selectMergerChainToSurviveAI(maxChains);
+      return this.selectMergerChainToSurviveAI(maxChains, this.currentPlayer);
     return this.selectChainUI(maxChains, "Select a chain to survive the merger", false);
   }
 
@@ -511,7 +516,7 @@ class Game {
     if (eligibleChains.size == 0)
       return Promise.reject("Tried to found a chain when all are active");
     if (this.useAI(this.currentPlayer))
-      return this.selectChainToFoundAI(eligibleChains);
+      return this.selectChainToFoundAI(eligibleChains, this.currentPlayer);
     return this.selectChainUI(eligibleChains, "Select a chain to found", false);
   }
 
@@ -563,7 +568,7 @@ class Game {
 
   async selectShareToPurchase(chains, iText) {
     if (this.useAI(this.currentPlayer))
-      return this.selectShareToPurchaseAI(chains);
+      return this.selectShareToPurchaseAI(chains, this.currentPlayer);
     return this.selectChainUI(chains, "Purchase up to " + iText + " shares", true);
   }
   
@@ -598,7 +603,7 @@ class Game {
 
   async selectMergeOption(options, player) {
     if (this.useAI(player))
-      return this.selectMergeOptionAI(options);
+      return this.selectMergeOptionAI(options, player);
     return this.selectChainUI(options, "Sell, trade, or hold your shares", true);
   }
 
@@ -646,35 +651,147 @@ class Game {
     return true;
   }
 
-  selectTileAI(tiles) {
-    let i = Math.floor(Math.random() * tiles.size);
-    let tile = Array.from(tiles)[i];
-    if (this.isTemporarilyUnplayable(tile))
-      return this.selectTileAI(tiles);
-    return Array.from(tiles)[i];
+  aiStrategy(player) {
+    if (player == 1)
+      return "random";
+    return "algorithmic";
   }
 
-  selectNextChainToMergeAI(chains) {
+  getAIShareState(player) {
+    let firstChains = new Set();
+    let secondChains = new Set();
+    let otherChains = new Set();
+    let zeroChains = new Set();
+
+    let playerShares = this.players[player].shares;
+    for (let c = 0; c < this.chains.length; c++) {
+      if (playerShares[c] == 0) {
+        zeroChains.add(c);
+        continue;
+      }
+      let playersWithMore = 0;
+      let playersWithSame = 0;
+      for (let i = 0; i < this.players.length; i++) {
+        if (i == player)
+          continue;
+        if (this.players[i].shares[c] > playerShares[c])
+          playersWithMore++;
+      }
+      if (playersWithMore == 0)
+        firstChains.add(c);
+      else if (playersWithMore == 1)
+        secondChains.add(c);
+      else
+        otherChains.add(c);
+    }
+    return [ firstChains, secondChains, otherChains, zeroChains ];
+  }
+
+  selectTileAI(tiles, player) {
+    let playableTiles = new Set();
+    for (let t of tiles) {
+      if (!this.isTemporarilyUnplayable(t))
+        playableTiles.add(t);
+    }
+ 
+    if (this.aiStrategy(player) == "random") {
+      let i = Math.floor(Math.random() * playableTiles.size);
+      return Array.from(playableTiles)[i];
+    }
+
+    let [ firstChains, secondChains, otherChains, zeroChains ] = this.getAIShareState(player);
+    let bestTile;
+    let bestTileScore = -1;
+    for (let t of playableTiles) {
+      let tileScore = (() => {
+        let [ neighboringChains, neighboringSingles ] = this.getNeighbors(t);
+        if (neighboringChains.size > 1) {
+          let firstInMerger = new Set();
+          let secondInMergerCount = 0;
+          let biggestChainSize = 0;
+          for (let n of neighboringChains) {
+            biggestChainSize = Math.max(biggestChainSize, this.chains[n].size);
+            if (firstChains.has(n))
+              firstInMerger.add(n);
+            else if (secondChains.has(n))
+              secondInMergerCount++;
+          }
+          if (firstInMerger.size > 1)
+            return 100;
+          if (firstInMerger.size == 1) {
+            if (secondInMergerCount > 0)
+              return 99;
+            let firstChain = neighboringChains.keys().next().value;
+            if (this.chains[firstChain].size < biggestChainSize)
+              return 95;
+            if (this.chains[firstChain].size >= 11)
+              return 90;
+            return 80;
+          }
+          return 0;
+        }
+        if (neighboringChains.size == 1) {
+          let neighboringChain = neighboringChains.keys().next().value;
+          if (firstChains.has(neighboringChain))
+            return 60;
+          if (secondChains.has(neighboringChain))
+            return 20;
+          return 5;
+        }
+        if (neighboringSingles.size > 0) {
+          if (this.players[player].cash >= 30)
+            return 65;
+          if (this.players[player].cash >= 15)
+            return 55;
+          return 0;
+        }
+        return 20;
+      })();
+      if (tileScore > bestTileScore ||
+          (tileScore == bestTileScore && Math.random() >= 0.5)) {
+        bestTileScore = tileScore;
+        bestTile = t;
+      }
+    }
+    return bestTile;
+  }
+
+  selectNextChainToMergeAI(chains, player) {
+    if (this.aiStrategy(player) == "random") {
+      let i = Math.floor(Math.random() * chains.size);
+      return Array.from(chains)[i];
+    }
+
+    // Prioritize the chain where the AI has the most shares
+    // to maximize share swap potential.
+    let maxShareChain = -1;
+    let maxShareCount = -1;
+    for (let c of chains) {
+      let shares = this.players[player].shares[c];
+      if (shares > maxShareCount) {
+        maxShareCount = shares;
+        maxShareChain = c;
+      }
+    }
+    return maxShareChain;
+  }
+
+  selectMergerChainToSurviveAI(chains, player) {
     let i = Math.floor(Math.random() * chains.size);
     return Array.from(chains)[i];
   }
 
-  selectMergerChainToSurviveAI(chains) {
+  selectChainToFoundAI(chains, player) {
     let i = Math.floor(Math.random() * chains.size);
     return Array.from(chains)[i];
   }
 
-  selectChainToFoundAI(chains) {
+  selectShareToPurchaseAI(chains, player) {
     let i = Math.floor(Math.random() * chains.size);
     return Array.from(chains)[i];
   }
 
-  selectShareToPurchaseAI(chains) {
-    let i = Math.floor(Math.random() * chains.size);
-    return Array.from(chains)[i];
-  }
-
-  selectMergeOptionAI(options) {
+  selectMergeOptionAI(options, player) {
     let i = Math.floor(Math.random() * options.size);
     return Array.from(options)[i];
   }
