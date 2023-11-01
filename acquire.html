@@ -193,8 +193,11 @@ class Game {
       await this.purchaseShares();
 
       let newTile = this.drawTile();
-      if (newTile != undefined)
+      if (newTile != undefined) {
         this.players[this.currentPlayer].tiles.add(newTile);
+        if (this.ai && !this.useAI(this.currentPlayer))
+          uiBoard.rows[newTile.i].cells[newTile.j].style.border = "5px dashed black";
+      }
 
       this.currentPlayer = (this.currentPlayer + 1) % this.players.length;
       this.updateAssets();
@@ -280,8 +283,11 @@ class Game {
 
   async selectTile(tiles) {
     for (let t of tiles) {
-      if (this.isUnplayable(t))
+      if (this.isUnplayable(t)) {
         tiles.delete(t);
+        if (this.ai && !this.useAI(this.currentPlayer))
+          uiBoard.rows[t.i].cells[t.j].style.border = "1px solid black";
+      }
     }
     while (tiles.size < 6) {
       let t = this.drawTile();
@@ -291,10 +297,14 @@ class Game {
     }
 
     let tile;
-    if (this.useAI(this.currentPlayer))
+    if (this.useAI(this.currentPlayer)) {
       tile = await this.selectTileAI(tiles, this.currentPlayer);
-    else
+      uiBoard.rows[tile.i].cells[tile.j].style.border = "5px dashed red";
+      await new Promise(r => setTimeout(r, 1000));
+      uiBoard.rows[tile.i].cells[tile.j].style.border = "1px solid black";
+    } else {
       tile = await this.selectTileUI(tiles);
+    }
     tiles.delete(tile);
     return tile;
   }
@@ -310,9 +320,10 @@ class Game {
         }
         cell.style.border = "5px dashed black";
         cell.onclick = () => {
-          for (let t of tiles) {
-            uiBoard.rows[t.i].cells[t.j].onclick = null;
-            uiBoard.rows[t.i].cells[t.j].style.border = "1px solid black";
+          for (let tileToClear of tiles) {
+            uiBoard.rows[tileToClear.i].cells[tileToClear.j].onclick = null;
+            if (!this.ai || tileToClear == t)
+              uiBoard.rows[tileToClear.i].cells[tileToClear.j].style.border = "1px solid black";
           }
           document.getElementById("prompt").innerText = "";
           resolve(t);
@@ -515,8 +526,13 @@ class Game {
     }
     if (eligibleChains.size == 0)
       return Promise.reject("Tried to found a chain when all are active");
-    if (this.useAI(this.currentPlayer))
-      return this.selectChainToFoundAI(eligibleChains, this.currentPlayer);
+    if (this.useAI(this.currentPlayer)) {
+      let chain = await this.selectChainToFoundAI(eligibleChains, this.currentPlayer);
+      assets.rows[0].cells[chain+1].style.border = "5px dashed black";
+      await new Promise(r => setTimeout(r, 1000));
+      assets.rows[0].cells[chain+1].style.border = "1px solid black";
+      return chain;
+    }
     return this.selectChainUI(eligibleChains, "Select a chain to found", false);
   }
 
@@ -777,13 +793,70 @@ class Game {
   }
 
   selectMergerChainToSurviveAI(chains, player) {
-    let i = Math.floor(Math.random() * chains.size);
-    return Array.from(chains)[i];
+    if (this.aiStrategy(player) == "random") {
+      let i = Math.floor(Math.random() * chains.size);
+      return Array.from(chains)[i];
+    }
+    let [ firstChains, secondChains, otherChains, zeroChains ] = this.getAIShareState(player);
+    let size = chains.keys().next().value;
+    if (size >= 4 || this.availableTiles.length < 50) {
+      for (let c of firstChains) {
+        if (chains.has(c))
+          return c;
+      }
+      for (let c of secondChains) {
+        if (chains.has(c))
+          return c;
+      }
+      for (let c of otherChains) {
+        if (chains.has(c))
+          return c;
+      }
+      for (let c of zeroChains) {
+        if (chains.has(c))
+          return c;
+      }
+    } else {
+      let chainsBeingMerged = structuredClone(chains);
+      for (let c of firstChains) {
+        if (chainsBeingMerged.has(c)) {
+          chainsBeingMerged.delete(c);
+          if (chainsBeingMerged.size == 1)
+            return chainsBeingMerged.keys().next().value;
+        }
+      }
+      for (let c of secondChains) {
+        if (chainsBeingMerged.has(c)) {
+          chainsBeingMerged.delete(c);
+          if (chainsBeingMerged.size == 1)
+            return chainsBeingMerged.keys().next().value;
+        }
+      }
+      return chainsBeingMerged.keys().next().value;
+    }
   }
 
   selectChainToFoundAI(chains, player) {
-    let i = Math.floor(Math.random() * chains.size);
-    return Array.from(chains)[i];
+    if (this.aiStrategy(player) == "random") {
+      let i = Math.floor(Math.random() * chains.size);
+      return Array.from(chains)[i];
+    }
+    if (this.availableTiles.length < 50) {
+      for (let i = this.chains.length - 1; i >= 0; i--) {
+        if (this.chains[i].size == 0) {
+          if (!chains.has(i)) throw new Error ("invalid chain selected by AI");
+          return i;
+        }
+      }
+    } else {
+      for (let i = 0; i < this.chains.length; i++) {
+        if (this.chains[i].size == 0) {
+          if (!chains.has(i)) throw new Error ("invalid chain selected by AI");
+          return i;
+        }
+      }
+    }
+    throw new Error ("AI failed to select chain");
   }
 
   selectShareToPurchaseAI(chains, player) {
