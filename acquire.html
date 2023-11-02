@@ -580,11 +580,17 @@ class Game {
     }
   }
 
-  async selectShareToPurchase(chains, iText) {
+  async selectShareToPurchase(chains, sharesLeftToPurchase) {
     chains.add(-1); // Show done option
-    if (this.useAI(this.currentPlayer))
-      return this.selectShareToPurchaseAI(chains, this.currentPlayer);
-    return this.selectChainUI(chains, "Purchase up to " + iText + " shares");
+    if (this.useAI(this.currentPlayer)) {
+      let chain = await this.selectShareToPurchaseAI(chains, this.currentPlayer, sharesLeftToPurchase);
+      assets.rows[0].cells[chain+1].style.border = "5px dashed black";
+      await new Promise(r => setTimeout(r, 1000));
+      assets.rows[0].cells[chain+1].style.border = "1px solid black";
+      await new Promise(r => setTimeout(r, 500));
+      return chain;
+    }
+    return this.selectChainUI(chains, "Purchase up to " + sharesLeftToPurchase + " shares");
   }
   
   async mergeShares(survivingChain, mergingChain) {
@@ -865,9 +871,58 @@ class Game {
     throw new Error ("AI failed to select chain");
   }
 
-  selectShareToPurchaseAI(chains, player) {
-    let i = Math.floor(Math.random() * chains.size);
-    return Array.from(chains)[i];
+  selectShareToPurchaseAI(chains, player, sharesLeftToPurchase) {
+    if (this.aiStrategy(player) == "random") {
+      let i = Math.floor(Math.random() * chains.size);
+      return Array.from(chains)[i];
+    }
+    // Remove done - it's always an option, just look at the chains.
+    chains.delete(-1);
+    let [ firstChains, secondChains, otherChains, zeroChains ] = this.getAIShareState(player);
+
+    let bestChain;
+    let bestChainScore = -1;
+    for (let c of chains) {
+      let chainScore = (() => {
+        let playerShares = this.players[player].shares[c];
+        let chainPrice = this.getChainPrice(c);
+        let bestOtherPlayerShares = 0;
+        let otherPlayersWitShares = 0;
+        for (let p = 0; p < this.players.length; p++) {
+          if (p != player) {
+            if (this.players[p].shares[c] != 0)
+              otherPlayersWitShares++;
+            bestOtherPlayerShares = Math.max(bestOtherPlayerShares, this.players[p].shares[c]);
+          }
+        }
+        if (firstChains.has(c)) {
+          let sharesAhead = playerShares - bestOtherPlayerShares;
+          if (sharesAhead < 3)
+            return 100;
+          if (sharesAhead == 3)
+            return 80;
+          if (chainPrice < 5)
+            return 60;
+          return 0;
+        }
+
+        let sharesBehind = bestOtherPlayerShares - playerShares;
+        let priceToCatchUp = sharesBehind * chainPrice;
+        if (secondChains.has(c) || otherChains.has(c)) {
+          if (sharesBehind <= sharesLeftToPurchase && this.players[player].cash >= priceToCatchUp)
+            return 90;
+        }
+        if (otherPlayersWitShares == 1 && playerShares == 0)
+          return 70;
+        return 60 - priceToCatchUp + (otherPlayersWitShares == 1 ? 10 : 0);
+      })();
+      if (chainScore > bestChainScore ||
+          (chainScore == bestChainScore && Math.random() >= 0.5)) {
+        bestChain = c;
+        bestChainScore = chainScore;
+      }
+    }
+    return bestChain;
   }
 
   selectMergeOptionAI(options, player, survivingChain, mergingChain) {
