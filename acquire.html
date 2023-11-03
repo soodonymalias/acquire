@@ -123,7 +123,6 @@ class Game {
     this.players = savedGame.players;
     this.currentPlayer = savedGame.currentPlayer;
 
-
     for (let i = 0; i <  this.board.length; i++) {
       for (let j = 0; j < this.board[i].length; j++) {
         this.updateBoard(i, j, this.board[i][j]);
@@ -233,7 +232,12 @@ class Game {
   }
 
   updateBoard(i, j, value) {
-    this.board[i][j] = value;
+    if (this.board[i][j] != value) {
+      this.board[i][j] = value;
+      if (value != "open" && value != "single")
+        this.chains[value].size++;
+    }
+
     let cell = document.getElementById("uiBoard").rows[i].cells[j];
     if (value == "open") {
       cell.innerText = "" + (i+1) + String.fromCharCode(65 + j);
@@ -244,7 +248,6 @@ class Game {
     } else {
       cell.style.backgroundColor = this.chains[value].color;
       cell.innerText = "";
-      this.chains[value].size++;
     }
   }
 
@@ -554,7 +557,8 @@ class Game {
       return Promise.reject("Tried to found a chain when all are active");
     if (this.useAI(this.currentPlayer)) {
       let chain = await this.selectChainToFoundAI(eligibleChains, this.currentPlayer);
-      assets.rows[0].cells[chain+1].style.border = "5px dashed black";
+      await new Promise(r => setTimeout(r, 500));
+      assets.rows[0].cells[chain+1].style.border = "5px inset black";
       await new Promise(r => setTimeout(r, 1000));
       assets.rows[0].cells[chain+1].style.border = "1px solid black";
       return chain;
@@ -610,10 +614,10 @@ class Game {
     chains.add(-1); // Show done option
     if (this.useAI(this.currentPlayer)) {
       let chain = await this.selectShareToPurchaseAI(chains, this.currentPlayer, sharesLeftToPurchase);
-      assets.rows[0].cells[chain+1].style.border = "5px dashed black";
+      await new Promise(r => setTimeout(r, 500));
+      assets.rows[0].cells[chain+1].style.border = "5px inset black";
       await new Promise(r => setTimeout(r, 1000));
       assets.rows[0].cells[chain+1].style.border = "1px solid black";
-      await new Promise(r => setTimeout(r, 500));
       return chain;
     }
     return this.selectChainUI(chains, "Purchase up to " + sharesLeftToPurchase + " shares");
@@ -652,10 +656,10 @@ class Game {
     options.add(-1); // Show done option
     if (this.useAI(player)) {
       let option = await this.selectMergeOptionAI(options, player, p, survivingChain, mergingChain);
-      assets.rows[0].cells[option+1].style.border = "5px dashed black";
+      await new Promise(r => setTimeout(r, 500));
+      assets.rows[0].cells[option+1].style.border = "5px inset black";
       await new Promise(r => setTimeout(r, 1000));
       assets.rows[0].cells[option+1].style.border = "1px solid black";
-      await new Promise(r => setTimeout(r, 500));
       return option;
     }
     return this.selectChainUI(options, "Sell, trade, or hold your shares");
