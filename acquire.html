@@ -774,6 +774,21 @@ class Game {
             else if (secondChains.has(n))
               secondInMergerCount++;
           }
+          for (let n of neighboringChains) {
+            if (this.chains[n].size == biggestChainSize)
+              continue;
+            if (firstChains.has(n))
+              continue;
+            let playersWitShares = 0;
+            for (let p = 0; p < this.players.length; p++) {
+              if (this.players[p].shares[n] != 0)
+                otherPlayersWitShares++;
+            }
+            // Avoid merging a chain when one player will get both bonuses.
+            if (playersWithShares == 1)
+              return 0;
+          }
+
           if (firstInMerger.size > 1)
             return 100;
           if (firstInMerger.size == 1) {
@@ -952,6 +967,8 @@ class Game {
         bestChainScore = chainScore;
       }
     }
+    if (bestChain == undefined)
+      return -1;
     return bestChain;
   }
 
