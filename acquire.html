@@ -105,7 +105,7 @@ class Game {
 
     this.players = new Array(playerCount);
     for (let i = 0; i < this.players.length; i++) {
-      this.players[i] = { tiles : new Array(), name: names[i], shares: new Array(this.chains.length).fill(0), cash: 60 }
+      this.players[i] = { id: i, tiles : new Array(), name: names[i], shares: new Array(this.chains.length).fill(0), cash: 60 }
     }
     document.getElementById("prompt").innerText = "";
   }
@@ -224,7 +224,7 @@ class Game {
 
       this.currentPlayer = (this.currentPlayer + 1) % this.players.length;
       this.updateAssets();
-      if (this.gameOver()) {
+      if (await this.gameOver()) {
         localStorage.removeItem("savedGame");
         break;
       }
@@ -453,7 +453,7 @@ class Game {
     return this.selectChainUI(largestSet, "Select which chain to merge next");
   }
   
-  payBonuses(c) {
+  async payBonuses(c) {
     let price = this.getChainPrice(c);
     let playersWithShares = new Array();
     for (let i = 0; i < this.players.length; i++) {
@@ -462,6 +462,11 @@ class Game {
     }
     if (playersWithShares.length == 1) {
       // One player gets both bonuses
+      let cell = assets.rows[rowsBeforePlayers+playersWithShares[0].id].cells[c+1];
+      cell.style.border = "5px solid green";
+      await new Promise(r => setTimeout(r, 1000));
+      cell.style.border = "1px solid black";
+
       playersWithShares[0].cash += (price * 15);
       return;
     }
@@ -479,15 +484,19 @@ class Game {
         if (playersWithShares[0].shares[c] != playersWithShares[tiedPlayers].shares[c])
           break;
       }
+
+      for (let i = 0; i < tiedPlayers; i++)
+        assets.rows[rowsBeforePlayers+playersWithShares[i].id].cells[c+1].style.border = "5px solid green";
+      await new Promise(r => setTimeout(r, 1000));
+      for (let i = 0; i < tiedPlayers; i++)
+        assets.rows[rowsBeforePlayers+playersWithShares[i].id].cells[c+1].style.border = "1px solid black";
+
       let splitBonus = Math.ceil((price * 15) / tiedPlayers);
       for (let i = 0; i < tiedPlayers; i++) {
         playersWithShares[i].cash += splitBonus;
       }
       return;
     }
-    
-    // solo first place
-    playersWithShares[0].cash += (price * 10);
 
     // split the second place bonus as necessary
     let secondPlaces = 1;
@@ -495,6 +504,16 @@ class Game {
       if (playersWithShares[1].shares[c] != playersWithShares[1+secondPlaces].shares[c])
         break;
     }
+
+    for (let i = 0; i < secondPlaces; i++)
+      assets.rows[rowsBeforePlayers+playersWithShares[i+1].id].cells[c+1].style.border = "5px solid yellow";
+    assets.rows[rowsBeforePlayers+playersWithShares[0].id].cells[c+1].style.border = "5px solid green";
+    await new Promise(r => setTimeout(r, 1000));
+    for (let i = 0; i < secondPlaces; i++)
+      assets.rows[rowsBeforePlayers+playersWithShares[i+1].id].cells[c+1].style.border = "1px solid black";
+    assets.rows[rowsBeforePlayers+playersWithShares[0].id].cells[c+1].style.border = "1px solid black";
+
+    playersWithShares[0].cash += (price * 10);
     let splitBonus = Math.ceil((price * 5) / secondPlaces);
     for (let i = 0; i < secondPlaces; i++) {
       playersWithShares[1+i].cash += splitBonus;
@@ -511,7 +530,7 @@ class Game {
     while (chainsToProcess.size > 0) {
       let n = await this.selectNextChainToMerge(chainsToProcess);
       chainsToProcess.delete(n);
-      this.payBonuses(n);
+      await this.payBonuses(n);
       this.updateAssets();
       await this.mergeShares(chain, n);
       this.chains[n].size = 0;
@@ -680,14 +699,14 @@ class Game {
     return hasSafeChain && !hasUnsafeChain;
   }
 
-  gameOver() {
+  async gameOver() {
     if (!this.isGameOver())
       return false;
     this.currentPlayer = null;
     for (let c = 0; c < this.chains.length; c++) {
       if (this.chains[c].size == 0)
         continue;
-      this.payBonuses(c);
+      await this.payBonuses(c);
       let price = this.getChainPrice(c);
       for (let p of this.players) {
         p.cash += (p.shares[c] * price);
