@@ -19,6 +19,7 @@ players and mode:
 <script>
 function start() {
   window.game = new Game(parseInt(count.value), mode.value == "ai");
+  window.game.start();
 }
 
 function drawGrid(rows, cols, id) {
@@ -104,12 +105,31 @@ class Game {
 
     this.players = new Array(playerCount);
     for (let i = 0; i < this.players.length; i++) {
-      this.players[i] = { tiles : new Set(), name: names[i], shares: new Array(this.chains.length).fill(0), cash: 60 }
+      this.players[i] = { tiles : new Array(), name: names[i], shares: new Array(this.chains.length).fill(0), cash: 60 }
     }
+    document.getElementById("prompt").innerText = "";
+  }
 
+  start() {
     this.playInitialTiles();
     this.initAssets();
-    document.getElementById("prompt").innerText = "";
+    this.gameLoop();
+  }
+
+  resume(savedGame) {
+    this.board = savedGame.board;
+    this.availableTiles = savedGame.availableTiles;
+    this.chains = savedGame.chains;
+    this.players = savedGame.players;
+    this.currentPlayer = savedGame.currentPlayer;
+
+
+    for (let i = 0; i <  this.board.length; i++) {
+      for (let j = 0; j < this.board[i].length; j++) {
+        this.updateBoard(i, j, this.board[i][j]);
+      }
+    }
+    this.initAssets();
     this.gameLoop();
   }
 
@@ -187,6 +207,10 @@ class Game {
 
   async gameLoop() {
     while (true) {
+      if (!this.useAI(this.currentPlayer)) {
+        localStorage.setItem("savedGame", JSON.stringify(this));
+      }
+
       let tile = await this.selectTile(this.players[this.currentPlayer].tiles);
       await this.playTile(tile);
       this.updateAssets();
@@ -194,7 +218,7 @@ class Game {
 
       let newTile = this.drawTile();
       if (newTile != undefined) {
-        this.players[this.currentPlayer].tiles.add(newTile);
+        this.players[this.currentPlayer].tiles.push(newTile);
         if (this.ai && !this.useAI(this.currentPlayer))
           uiBoard.rows[newTile.i].cells[newTile.j].style.border = "5px dashed black";
       }
@@ -202,6 +226,7 @@ class Game {
       this.currentPlayer = (this.currentPlayer + 1) % this.players.length;
       this.updateAssets();
       if (this.gameOver()) {
+        localStorage.removeItem("savedGame");
         break;
       }
     }
@@ -282,18 +307,19 @@ class Game {
   }
 
   async selectTile(tiles) {
-    for (let t of tiles) {
+    for (let i = 0; i < tiles.length; i++) {
+      let t = tiles[i];
       if (this.isUnplayable(t)) {
-        tiles.delete(t);
+        tiles.splice(i, 1);
         if (this.ai && !this.useAI(this.currentPlayer))
           uiBoard.rows[t.i].cells[t.j].style.border = "1px solid black";
       }
     }
-    while (tiles.size < 6) {
+    while (tiles.length < 6) {
       let t = this.drawTile();
       if (t == undefined)
         break;
-      tiles.add(t);
+      tiles.push(t);
     }
 
     let tile;
@@ -305,7 +331,7 @@ class Game {
     } else {
       tile = await this.selectTileUI(tiles);
     }
-    tiles.delete(tile);
+    tiles.splice(tiles.findIndex(t => t === tile), 1);
     return tile;
   }
 
@@ -938,5 +964,14 @@ class Game {
       return -1; // Done
     return 7; // Cash
   }
+}
+
+window.onload = () => {
+  let savedGameJSON = localStorage.getItem("savedGame");
+  if (savedGameJSON == null)
+    return;
+  let savedGame = JSON.parse(savedGameJSON);
+  window.game = new Game(savedGame.players.length, savedGame.ai);
+  window.game.resume(savedGame);
 }
 </script>
