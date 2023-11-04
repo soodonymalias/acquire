@@ -798,13 +798,13 @@ class Game {
               continue;
             if (firstChains.has(n))
               continue;
-            let playersWitShares = 0;
+            let otherPlayersWitShares = 0;
             for (let p = 0; p < this.players.length; p++) {
               if (this.players[p].shares[n] != 0)
                 otherPlayersWitShares++;
             }
             // Avoid merging a chain when one player will get both bonuses.
-            if (playersWithShares == 1)
+            if (otherPlayersWitShares == 1)
               return 0;
           }
 
