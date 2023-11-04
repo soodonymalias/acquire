@@ -966,7 +966,7 @@ class Game {
           if (sharesAhead == 3)
             return 80;
           if (chainPrice < 5)
-            return 60;
+            return 10;
           return 0;
         }
 
@@ -980,6 +980,7 @@ class Game {
           return 70;
         return 60 - priceToCatchUp + (otherPlayersWitShares == 1 ? 10 : 0);
       })();
+
       if (chainScore > bestChainScore ||
           (chainScore == bestChainScore && Math.random() >= 0.5)) {
         bestChain = c;
