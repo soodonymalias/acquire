@@ -314,6 +314,7 @@ class Game {
       let t = tiles[i];
       if (this.isUnplayable(t)) {
         tiles.splice(i, 1);
+        i--; // Shortening `tiles`
         if (this.ai && !this.useAI(this.currentPlayer))
           uiBoard.rows[t.i].cells[t.j].style.border = "1px solid black";
       }
@@ -675,9 +676,9 @@ class Game {
     options.add(-1); // Show done option
     if (this.useAI(player)) {
       let option = await this.selectMergeOptionAI(options, player, p, survivingChain, mergingChain);
-      await new Promise(r => setTimeout(r, 500));
+      await new Promise(r => setTimeout(r, 200));
       assets.rows[0].cells[option+1].style.border = "5px inset black";
-      await new Promise(r => setTimeout(r, 1000));
+      await new Promise(r => setTimeout(r, 500));
       assets.rows[0].cells[option+1].style.border = "1px solid black";
       return option;
     }
