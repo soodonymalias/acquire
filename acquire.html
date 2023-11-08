@@ -211,7 +211,18 @@ class Game {
       }
 
       let tile = await this.selectTile(this.players[this.currentPlayer].tiles);
-      await this.playTile(tile);
+
+      // selectTile() removes unplayable tiles and replaces them until the player
+      // has a full hand, which may not be the canonical rule.
+      // `tile` will only be undefined if there are no playable tiles.
+      // Having no playable tiles with this rule is very difficult - it either
+      // requires a bunch of temporarily unplayable tiles, or a rare end of
+      // game scenario where there are several safe chains, but none at size
+      // 41 or greater, and at least one small one that is not yet merged.
+      // It seems ok to just skip playing a tile in that scenario?
+      if (tile != undefined)
+        await this.playTile(tile);
+
       this.updateAssets();
       await this.purchaseShares();
 
@@ -325,6 +336,9 @@ class Game {
         break;
       tiles.push(t);
     }
+
+    if (tiles.length == 0)
+      return undefined;
 
     let tile;
     if (this.useAI(this.currentPlayer)) {
