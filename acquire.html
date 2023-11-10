@@ -346,7 +346,6 @@ class Game {
       tile = await this.selectTileAI(tiles, this.currentPlayer);
       uiBoard.rows[tile.i].cells[tile.j].style.border = "5px dashed red";
       await new Promise(r => setTimeout(r, 1000));
-      uiBoard.rows[tile.i].cells[tile.j].style.border = "1px solid black";
     } else {
       tile = await this.selectTileUI(tiles);
     }
@@ -367,8 +366,6 @@ class Game {
         cell.onclick = () => {
           for (let tileToClear of tiles) {
             uiBoard.rows[tileToClear.i].cells[tileToClear.j].onclick = null;
-            if (!this.ai || tileToClear == t)
-              uiBoard.rows[tileToClear.i].cells[tileToClear.j].style.border = "1px solid black";
           }
           document.getElementById("prompt").innerText = "";
           resolve(t);
@@ -434,6 +431,7 @@ class Game {
       // new single
       this.updateBoard(tile.i, tile.j, "single");
     }
+    uiBoard.rows[tile.i].cells[tile.j].style.border = "1px solid black";
   }
 
   async foundChain(tile, neighboringSingles) {
@@ -593,7 +591,7 @@ class Game {
     if (this.useAI(this.currentPlayer)) {
       let chain = await this.selectChainToFoundAI(eligibleChains, this.currentPlayer);
       await new Promise(r => setTimeout(r, 500));
-      assets.rows[0].cells[chain+1].style.border = "5px inset black";
+      assets.rows[0].cells[chain+1].style.border = "5px solid black";
       await new Promise(r => setTimeout(r, 1000));
       assets.rows[0].cells[chain+1].style.border = "1px solid black";
       return chain;
@@ -650,7 +648,7 @@ class Game {
     if (this.useAI(this.currentPlayer)) {
       let chain = await this.selectShareToPurchaseAI(chains, this.currentPlayer, sharesLeftToPurchase);
       await new Promise(r => setTimeout(r, 500));
-      assets.rows[0].cells[chain+1].style.border = "5px inset black";
+      assets.rows[0].cells[chain+1].style.border = "5px solid black";
       await new Promise(r => setTimeout(r, 1000));
       assets.rows[0].cells[chain+1].style.border = "1px solid black";
       return chain;
@@ -692,7 +690,7 @@ class Game {
     if (this.useAI(player)) {
       let option = await this.selectMergeOptionAI(options, player, p, survivingChain, mergingChain);
       await new Promise(r => setTimeout(r, 200));
-      assets.rows[0].cells[option+1].style.border = "5px inset black";
+      assets.rows[0].cells[option+1].style.border = "5px solid black";
       await new Promise(r => setTimeout(r, 500));
       assets.rows[0].cells[option+1].style.border = "1px solid black";
       return option;
