@@ -344,11 +344,16 @@ class Game {
     let tile;
     if (this.useAI(this.currentPlayer)) {
       tile = await this.selectTileAI(tiles, this.currentPlayer);
+      if (tile == undefined)
+        return undefined;
       uiBoard.rows[tile.i].cells[tile.j].style.border = "5px dashed red";
       await new Promise(r => setTimeout(r, 1000));
     } else {
       tile = await this.selectTileUI(tiles);
+      if (tile == undefined)
+        return undefined;
     }
+
     tiles.splice(tiles.findIndex(t => t === tile), 1);
     return tile;
   }
@@ -356,12 +361,14 @@ class Game {
   async selectTileUI(tiles) {
     document.getElementById("prompt").innerText = "Select a tile to play";
     return new Promise(resolve => {
+      let foundPlayableTile = false;
       for (let t of tiles) {
         let cell = uiBoard.rows[t.i].cells[t.j];
         if (this.isTemporarilyUnplayable(t)) {
           cell.style.border = "5px dashed gray";
           continue;
         }
+        foundPlayableTile = true;
         cell.style.border = "5px dashed black";
         cell.onclick = () => {
           for (let tileToClear of tiles) {
@@ -371,6 +378,8 @@ class Game {
           resolve(t);
         }
       }
+      if (!foundPlayableTile)
+        resolve(undefined);
     });
   }
   
@@ -784,6 +793,8 @@ class Game {
       if (!this.isTemporarilyUnplayable(t))
         playableTiles.add(t);
     }
+    if (playableTiles.size == 0)
+      return undefined;
  
     if (this.aiStrategy(player) == "random") {
       let i = Math.floor(Math.random() * playableTiles.size);
